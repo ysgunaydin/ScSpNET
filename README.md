@@ -5,7 +5,7 @@ ScSpNET is a Python based unsupervised algorithm designed for the partitioning 2
 
 Used Packages
 
-# Name                    Version                   
+#### Name                 Version                   
 matplotlib                3.7.2          
 numpy                     1.25.2          
 opencv                    4.6.0          
