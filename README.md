@@ -8,7 +8,7 @@ ScSpNET is a Python based unsupervised algorithm designed for the partitioning 2
 ## Python Installation
 
 - You can download python from the official web page of Python https://www.python.org/downloads/ according to your Operating System.
-- python 3.11.5 is used for developing.
+- python 3.11.5 is used for developing the software, this version and later versions can be preferred.
 - After you install you can open **Command Line** from your computer and check its version by typing the following command.
 
  <pre>   
