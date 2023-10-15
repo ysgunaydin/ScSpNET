@@ -44,7 +44,7 @@ ScSpNET is a Python based unsupervised algorithm designed for the partitioning 2
 
 - If you don't want to handle these processes or if you stuck at some point, there is an executable version of the program (3GB) and you can request the executable file of the software from: yusufsevkignydn@gmail.com.
 
-The list of used packages are given below.
+The list of used packages are given below, these versions and later versions of these packages can be preffered.
 
 ### Used Packages
 
