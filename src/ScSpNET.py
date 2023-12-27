@@ -11,7 +11,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader, Dataset
 import matplotlib.pyplot as plt
 import numpy as np 
-
+import time
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -84,7 +84,7 @@ class tkinterApp(tk.Tk):
          
         tk.Tk.__init__(self, *args, **kwargs)
         self.title("ScSpNET")
-        self.geometry("1400x800")
+        self.geometry("1200x700")
 
         container = tk.Frame(self)  
         container.pack(side = "top", fill = "both", expand = True) 
@@ -120,69 +120,159 @@ class StartPage(tk.Frame):
         else:
            print("Model is not saved")
         sample_image = Image.open(self.file_path)
-        sample_image = sample_image.convert("L")
-
         
-        # Define a transformation to convert the PIL image into a tensor
+        print(sample_image.mode)
+        
         transform = transforms.Compose([
             transforms.Resize((128, 128)),
             transforms.ToTensor(),  # Converts the image to a PyTorch tensor
         ])
         
-        # Apply the transformation to the image
-        sample_image = transform(sample_image).unsqueeze(0).to(device)
-        sLayer, dLayer, output = model(sample_image)
-        reconstructed_pil_image = transforms.ToPILImage()(sample_image.squeeze())
-       
-        plt.figure(figsize=(12, 4))
-        plt.subplot(1, 3, 1)
-        plt.title("Original Image")
-        plt.imshow(reconstructed_pil_image, cmap='gray')
+        if(len(sample_image.mode) >= 3):
+            if(len(sample_image.mode) == 4):
+                r, g, b, a = sample_image.split()
+            
+            elif(len(sample_image.mode) == 3):
+                r, g, b = sample_image.split()
+                print(r.size)
+                 
+            # Apply the transformation to the image
+            r = transform(r).unsqueeze(0).to(device)
+            initial_r = r
+            sLayer1, dLayer1, _ = model(r)
+            
+            g = transform(g).unsqueeze(0).to(device)
+            sLayer2, dLayer2, _ = model(g)
+            
+            b = transform(b).unsqueeze(0).to(device)
+            sLayer3, dLayer3, _ = model(b)
+                            
+            combined_sLayers = torch.stack([sLayer1, sLayer2, sLayer3], dim=1)
+            combined_dLayers = torch.stack([dLayer1, dLayer2, dLayer3], dim=1)
+            
+            combined_sLayers = torch.clamp(combined_sLayers, 0, 1)
+            combined_dLayers = torch.clamp(combined_dLayers, 0, 1)
+            
+            combined_sLayers = combined_sLayers.squeeze().detach().permute(1, 2, 0).cpu().numpy()
+            combined_dLayers = combined_dLayers.squeeze().detach().permute(1, 2, 0).cpu().numpy()
+            
+            
+            plt.figure(figsize=(12, 4))
+            plt.subplot(1, 3, 1)
+            plt.title("Original Image")
+            plt.imshow(sample_image)
+            
+            plt.subplot(1, 3, 2)
+            plt.title("Smooth Layer")
+            plt.imshow((combined_sLayers))
+            plt.subplot(1, 3, 3)
+            plt.title("Detail Layer")
+            plt.imshow((combined_dLayers))
+            
+            file_path = "result.png"
+            plt.savefig(file_path)
+            
+            image = Image.open(file_path)
+            photo = ImageTk.PhotoImage(image)
+            
+            self.result_label.config(image=photo)
+            self.result_label.photo = photo  
+            
+            try:
+                line = int(self.input_entry.get())
+                
+                x = np.linspace(0, len(initial_r.squeeze().cpu().numpy()[line])-1, len(initial_r.squeeze().cpu().numpy())) 
+                fig, ax = plt.subplots()
+                plt.axis('off')
+                ax = fig.add_subplot(5, 1, 1)
+                ax.plot(x, (initial_r.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8))
+                ax.set_ylim([0,256])
+                ax = fig.add_subplot(5, 1, 3)
+                ax.plot(x, (sLayer1.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8)) 
+                ax.set_ylim([0,256])
+                
+                ax = fig.add_subplot(5, 1, 5)
+                ax.plot(x, (dLayer1.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8)) 
+                ax.set_ylim([0,256])
+                
+                file_path = "result2.png"
+                plt.savefig(file_path)
+                
+                image = Image.open(file_path)
+                photo = ImageTk.PhotoImage(image)
+                
+                self.analyze_label = ttk.Label(self, text="")
+                self.analyze_label.grid(row=5, column = 4)
+                self.analyze_label.config(image=photo)
+                self.test_button(text="Analyze single line of Image")
+                self.analyze_label.photo = photo  # Store a
+            
+            except ValueError as e:
+                # Code to handle the exception
+                print(f"An exception of type {type(e).__name__} occurred: {str(e)}")
+                
+        else:
+            sample_image = sample_image.convert("L")
+            
+            # Apply the transformation to the image
+            sample_image = transform(sample_image).unsqueeze(0).to(device)
+            sLayer, dLayer, output = model(sample_image)
+            reconstructed_pil_image = transforms.ToPILImage()(sample_image.squeeze())
+           
+            plt.figure(figsize=(12, 4))
+            plt.subplot(1, 3, 1)
+            plt.title("Original Image")
+            plt.imshow(reconstructed_pil_image, cmap='gray')
+            
+            plt.subplot(1, 3, 2)
+            plt.title("Smooth Layer")
+            plt.imshow((sLayer.squeeze().detach().cpu().numpy()* 255).astype(np.uint8), cmap='gray')
+            plt.subplot(1, 3, 3)
+            plt.title("Detail Layer")
+            plt.imshow((dLayer.squeeze().detach().cpu().numpy()* 255).astype(np.uint8), cmap='gray')
+            
+            file_path = "result.png"
+            plt.savefig(file_path)
+            
+            image = Image.open(file_path)
+            photo = ImageTk.PhotoImage(image)
+            
+            self.result_label.config(image=photo)
+            self.result_label.photo = photo  
         
-        plt.subplot(1, 3, 2)
-        plt.title("Smooth Layer")
-        plt.imshow((sLayer.squeeze().detach().cpu().numpy()* 255).astype(np.uint8), cmap='gray')
-        plt.subplot(1, 3, 3)
-        plt.title("Detail Layer")
-        plt.imshow((dLayer.squeeze().detach().cpu().numpy()* 255).astype(np.uint8), cmap='gray')
-        
-        file_path = "result.png"
-        plt.savefig(file_path)
-        
-        image = Image.open(file_path)
-        photo = ImageTk.PhotoImage(image)
-        
-        self.result_label.config(image=photo)
-        self.result_label.photo = photo  
-        
-        line = int(self.input_entry.get())
-        
-        x = np.linspace(0, len(sample_image.squeeze().cpu().numpy()[line])-1, len(sample_image.squeeze().cpu().numpy())) 
-        fig, ax = plt.subplots()
-        plt.axis('off')
-        ax = fig.add_subplot(5, 1, 1)
-        ax.plot(x, (sample_image.squeeze().cpu().numpy()[line]* 255).astype(np.uint8))
-        ax.set_ylim([0,256])
-        ax = fig.add_subplot(5, 1, 3)
-        ax.plot(x, (sLayer.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8)) 
-        ax.set_ylim([0,256])
-        
-        ax = fig.add_subplot(5, 1, 5)
-        ax.plot(x, (dLayer.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8)) 
-        ax.set_ylim([0,256])
-        
-        file_path = "result2.png"
-        plt.savefig(file_path)
-        
-        image = Image.open(file_path)
-        photo = ImageTk.PhotoImage(image)
-        
-        self.analyze_label = ttk.Label(self, text="")
-        self.analyze_label.grid(row=5, column = 4)
-        self.analyze_label.config(image=photo)
-        self.test_button(text="Analyze single line of Image")
-        self.analyze_label.photo = photo  # Store a
-    
+            try:
+                line = int(self.input_entry.get())
+                
+                x = np.linspace(0, len(sample_image.squeeze().cpu().numpy()[line])-1, len(sample_image.squeeze().cpu().numpy())) 
+                fig, ax = plt.subplots()
+                plt.axis('off')
+                ax = fig.add_subplot(5, 1, 1)
+                ax.plot(x, (sample_image.squeeze().cpu().numpy()[line]* 255).astype(np.uint8))
+                ax.set_ylim([0,256])
+                ax = fig.add_subplot(5, 1, 3)
+                ax.plot(x, (sLayer.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8)) 
+                ax.set_ylim([0,256])
+                
+                ax = fig.add_subplot(5, 1, 5)
+                ax.plot(x, (dLayer.squeeze().detach().cpu().numpy()[line] * 255).astype(np.uint8)) 
+                ax.set_ylim([0,256])
+                
+                file_path = "result2.png"
+                plt.savefig(file_path)
+                
+                image = Image.open(file_path)
+                photo = ImageTk.PhotoImage(image)
+                
+                self.analyze_label = ttk.Label(self, text="")
+                self.analyze_label.grid(row=5, column = 4)
+                self.analyze_label.config(image=photo)
+                self.test_button(text="Analyze single line of Image")
+                self.analyze_label.photo = photo  # Store a
+            
+            except ValueError as e:
+                # Code to handle the exception
+                print(f"An exception of type {type(e).__name__} occurred: {str(e)}")
+ 
     def open_image_dialog(self):
         file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp")])
         if file_path:
@@ -324,7 +414,7 @@ class Page1(tk.Frame):
          
         tk.Frame.__init__(self, parent)
         label = ttk.Label(self, text ="Train Your Model", font = LARGEFONT)
-        label.grid(row = 0, column = 4, padx = 10, pady = 10)
+        label.grid(row = 1, column = 0, padx = 10, pady = 10)
   
         button1 = ttk.Button(self, text ="Test Single Image",
                             command = lambda : controller.show_frame(StartPage))
@@ -333,23 +423,23 @@ class Page1(tk.Frame):
         button2 = ttk.Button(self, text ="Test Multiple Image",
                             command = lambda : controller.show_frame(Page2))
      
-        button2.grid(row = 2, column = 1, padx = 10, pady = 10)
-        button2.grid(row = 2, column = 1, padx = 10, pady = 10)
+        button2.grid(row = 1, column = 2, padx = 10, pady = 10)
+        #button2.grid(row = 2, column = 1, padx = 10, pady = 10)
         
         selectFolder_button = ttk.Button(self, text="Select training images folder", command= self.select_folder_dialog)
-        selectFolder_button.grid(row = 2, column = 4)
+        selectFolder_button.grid(row = 2, column = 0)
         
         self.result_text = tk.Text(self, height=20, width=80)
-        self.result_text.grid(row = 3, column = 4, padx=10, pady=10, sticky="nsew")
+        self.result_text.grid(row = 3, column = 0, padx=10, pady=10, sticky="nsew")
         self.result_text.config(wrap=tk.WORD)
         
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.result_text.yview)
-        scrollbar.grid(row=3, column=5, sticky="ns")
+        scrollbar.grid(row=3, column=1, sticky="ns")
         self.result_text.config(yscrollcommand=scrollbar.set)
 
         
   
-# third window frame page2
+# Test Multiple Images
 class Page2(tk.Frame): 
     
     def testImage(self, sample_image, file_name):
@@ -366,35 +456,87 @@ class Page2(tk.Frame):
         transform = transforms.Compose([
             transforms.ToTensor(),  # Converts the image to a PyTorch tensor
         ])
+        sample_image = sample_image.resize((128, 128))  # Resize the image if needed
         
-        # Apply the transformation to the image
-        sample_image = transform(sample_image).unsqueeze(0).to(device)
-        sLayer, dLayer, output = model(sample_image)
-        
-        saveSmoothDir = "smoothResults"
-        if not os.path.isdir(saveSmoothDir):
-            os.makedirs(saveSmoothDir)
+        if(len(sample_image.mode) >= 3):
+            if(len(sample_image.mode) == 4):
+                r, g, b, a = sample_image.split()
             
-        saveDetailDir = "detailResults"
-        if not os.path.isdir(saveDetailDir):
-            os.makedirs(saveDetailDir)  
-        image = Image.fromarray((sLayer.squeeze().detach().cpu().numpy()* 255).astype(np.uint8))
-        image.save("./" + saveSmoothDir +"/"+file_name)
-        
-        image = Image.fromarray((dLayer.squeeze().detach().cpu().numpy()* 255).astype(np.uint8))
-        image.save("./" + saveDetailDir + "/"+file_name)
+            elif(len(sample_image.mode) == 3):
+                r, g, b = sample_image.split()
+                print(r.size)
+                 
+            # Apply the transformation to the image
+            r = transform(r).unsqueeze(0).to(device)
+            sLayer1, dLayer1, _ = model(r)
+            
+            g = transform(g).unsqueeze(0).to(device)
+            sLayer2, dLayer2, _ = model(g)
+            
+            b = transform(b).unsqueeze(0).to(device)
+            sLayer3, dLayer3, _ = model(b)
+                            
+            combined_sLayers = torch.stack([sLayer1, sLayer2, sLayer3], dim=1)
+            combined_dLayers = torch.stack([dLayer1, dLayer2, dLayer3], dim=1)
+            
+            combined_sLayers = torch.clamp(combined_sLayers, 0, 1)
+            combined_dLayers = torch.clamp(combined_dLayers, 0, 1)
+            
+            sLayer = combined_sLayers.squeeze().detach().permute(1, 2, 0).cpu().numpy()
+            dLayer = combined_dLayers.squeeze().detach().permute(1, 2, 0).cpu().numpy()
+            
+            saveSmoothDir = "smoothResults"
+            if not os.path.isdir(saveSmoothDir):
+                os.makedirs(saveSmoothDir)
+                
+            saveDetailDir = "detailResults"
+            if not os.path.isdir(saveDetailDir):
+                os.makedirs(saveDetailDir)  
+            
+            image_array = (sLayer * 255).astype(np.uint8)
+
+            # Convert the NumPy array to a PIL Image
+            image_pil = Image.fromarray(image_array)
+            image_pil.save("./" + saveSmoothDir +"/"+file_name)
+            
+            image_array = (dLayer * 255).astype(np.uint8)
+            
+            # Convert the NumPy array to a PIL Image
+            image_pil = Image.fromarray(image_array)
+            image_pil.save("./" + saveDetailDir +"/"+file_name)
+            
+        else:
+            sample_image = sample_image.convert("L")
+            # Apply the transformation to the image
+            sample_image = transform(sample_image).unsqueeze(0).to(device)
+            sLayer, dLayer, output = model(sample_image)
+            
+            sLayer = sLayer.squeeze().detach().cpu().numpy();
+            dLayer = dLayer.squeeze().detach().cpu().numpy()
+            
+            saveSmoothDir = "smoothResults"
+            if not os.path.isdir(saveSmoothDir):
+                os.makedirs(saveSmoothDir)
+                
+            saveDetailDir = "detailResults"
+            if not os.path.isdir(saveDetailDir):
+                os.makedirs(saveDetailDir)  
+            image = Image.fromarray((sLayer * 255).astype(np.uint8))
+            image.save("./" + saveSmoothDir +"/"+file_name)
+            
+            image = Image.fromarray((dLayer * 255).astype(np.uint8))
+            image.save("./" + saveDetailDir + "/"+file_name)
         
     def select_folder_dialog(self):
         folder_path = filedialog.askdirectory()
         if folder_path:
+            training_start_time = time.time()
             for filename in os.listdir(folder_path):
                 if filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp")):
                     image_path = os.path.join(folder_path, filename)
                     image = Image.open(image_path)
-                    image = image.resize((128, 128))  # Resize the image if needed
-                    image = image.convert("L")
                     self.testImage(image, filename)
-            
+            print('Training finished, took {:.2f}'.format(time.time() - training_start_time))   
             
             
     def __init__(self, parent, controller):
@@ -412,9 +554,9 @@ class Page2(tk.Frame):
         button2 = ttk.Button(self, text ="Test Single Image",
                             command = lambda : controller.show_frame(StartPage))
     
-        button2.grid(row = 2, column = 1, padx = 10, pady = 10)
+        button2.grid(row = 1, column = 2, padx = 10, pady = 10)
         selectFolder_button = ttk.Button(self, text="Select input images folder", command= self.select_folder_dialog)
-        selectFolder_button.grid(row = 2, column = 4)
+        selectFolder_button.grid(row = 1, column = 4)
 
 # Driver Code
 app = tkinterApp()
